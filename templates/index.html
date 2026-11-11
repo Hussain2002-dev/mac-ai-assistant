@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mac AI Assistant</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: center;
+      padding: 24px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #eef2ff; background: linear-gradient(135deg, #101827, #182b46);
+    }
+    .panel {
+      width: min(680px, 100%); padding: 32px; border: 1px solid #354966;
+      border-radius: 22px; background: rgba(12, 23, 39, .94);
+      box-shadow: 0 20px 60px #0005;
+    }
+    h1 { margin: 0 0 8px; font-size: 30px; }
+    .sub { color: #a9bad0; margin: 0 0 26px; }
+    label { display: block; margin-bottom: 9px; color: #dbeafe; }
+    .entry { display: flex; gap: 10px; }
+    input {
+      flex: 1; min-width: 0; padding: 15px; border-radius: 12px;
+      border: 1px solid #49617f; background: #0b1728; color: white; font-size: 16px;
+    }
+    button {
+      border: 0; border-radius: 12px; padding: 13px 17px; cursor: pointer;
+      color: white; background: #2878e5; font-size: 15px; font-weight: 600;
+    }
+    button:disabled { opacity: .55; cursor: wait; }
+    .mic { background: #28506f; white-space: nowrap; }
+    .examples { margin-top: 22px; color: #a9bad0; line-height: 1.9; font-size: 14px; }
+    #status {
+      margin-top: 22px; min-height: 58px; padding: 15px; border-radius: 12px;
+      background: #14243a; color: #dbeafe; line-height: 1.5;
+    }
+    #provider { color: #8dbbff; font-size: 12px; margin-top: 9px; }
+    .note { color: #8fa4bd; font-size: 12px; margin-top: 20px; line-height: 1.5; }
+    @media (max-width: 520px) {
+      .entry { flex-direction: column; }
+      button { width: 100%; }
+      .panel { padding: 23px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <h1>Mac AI Assistant</h1>
+    <p class="sub">Speak or type a command. Your Mac will perform the supported action.</p>
+
+    <form id="commandForm">
+      <label for="commandInput">Your command</label>
+      <div class="entry">
+        <input id="commandInput" autocomplete="off" placeholder="Example: Open Safari" required>
+        <button type="submit" id="sendBtn">Send</button>
+        <button type="button" class="mic" id="micBtn">🎙 Speak</button>
+      </div>
+    </form>
+
+    <div id="status" role="status">Ready. Try “open YouTube” or “open Downloads”.</div>
+    <div id="provider"></div>
+
+    <div class="examples">
+      <strong>Try these commands:</strong><br>
+      • Open Safari / Calculator / Visual Studio Code<br>
+      • Open YouTube / GitHub / Gmail<br>
+      • Open Downloads / Documents / Desktop<br>
+      • Search the web for Python tutorials
+      • Find Python tutorials on YouTube<br>
+• Find videos about AI agents<br>
+• Recommend AI learning channels<br>
+      
+    </div>
+
+    <p class="note">
+      Voice input uses your browser's speech recognition feature and may require an internet
+      connection and microphone permission. Commands are sent to the selected AI services
+      for classification. Only supported actions are executed by this app.
+    </p>
+  </main>
+
+  <script>
+    const form = document.getElementById("commandForm");
+    const input = document.getElementById("commandInput");
+    const statusBox = document.getElementById("status");
+    const providerBox = document.getElementById("provider");
+    const sendBtn = document.getElementById("sendBtn");
+    const micBtn = document.getElementById("micBtn");
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const command = input.value.trim();
+      if (!command) return;
+
+      sendBtn.disabled = true;
+      statusBox.textContent = "Thinking... classifying your command.";
+      providerBox.textContent = "";
+
+      try {
+        const response = await fetch("/command", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({command})
+        });
+        const data = await response.json();
+                statusBox.textContent = data.message || "No response received.";
+        providerBox.textContent = data.provider
+          ? `Intent classified by: ${data.provider} | Action: ${data.action}`
+          : "";
+
+        // Speak the assistant's response aloud
+        if ("speechSynthesis" in window && data.message) {
+          window.speechSynthesis.cancel();
+
+          const speech = new SpeechSynthesisUtterance(data.message);
+          speech.lang = "en-US";
+          speech.rate = 1;
+
+          window.speechSynthesis.speak(speech);
+        }
+      } catch (error) {
+        statusBox.textContent = "Could not connect to the assistant. Make sure the Python server is running.";
+      } finally {
+        sendBtn.disabled = false;
+      }
+    });
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      micBtn.disabled = true;
+      micBtn.title = "Speech recognition is not supported in this browser.";
+      micBtn.textContent = "Voice unavailable";
+    } else {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-US";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      micBtn.addEventListener("click", () => {
+        statusBox.textContent = "Listening... speak your command.";
+        recognition.start();
+      });
+
+      recognition.onresult = (event) => {
+        input.value = event.results[0][0].transcript;
+        form.requestSubmit();
+      };
+      recognition.onerror = (event) => {
+        statusBox.textContent = `Voice input error: ${event.error}. Check microphone permission or type your command instead.`;
+      };
+      recognition.onend = () => {};
+    }
+  </script>
+</body>
+</html>
